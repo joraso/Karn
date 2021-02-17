@@ -8,5 +8,6 @@ This repository is intended to be a collection of various machine learning model
 - Simple AutoEncoder DNN
 
 ## Planned inclusions are:
-- variational/convulutional Autoencoders
+- Variational & convolutional Autoencoders
 - Support vector machines / classic ML methods
+- Unsupervised / Deep Learning models

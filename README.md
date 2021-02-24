@@ -7,17 +7,19 @@ This repository is intended to be a collection of various machine learning model
 ### Building Blocks
 Compound-layer block object used to construct neural networks.
 - **DenseBlock**: Simple block of dense layers.
+- **Conv2Dblock**: A block consisting of a 2D convolution + pooling, for image-based archetectures.
 ### Network Archetectures
 Sample constructions of different neural network archetechtures.
 - **SimpleClassifier**: Simple DNN for supervised classification.
-- **SimpleAutoEncoder**: Simplest possible autoencoder archetecture
+- **SimpleAutoEncoder**: Simplest possible autoencoder archetecture.
+- **ImageClassifier**: Basic structure for a convolutional image classification network.
 
 ## Notebooks / Experiments:
 - **SimpleClassifier_MINSTfashion**: A simple network to classify images of articles of clothing from the MINST fashion data set.
 - **SimpleAutoEncoder_MINSTfashion**: A test of autoencoder archetecture on the MINST fashion data set, testing it's reducibility to 2 dimensions.
+- **ImageClassifier_CIFAR**: A first pass at implementing/testing the ImageClassifier object using the CIFAR 10 data set.
 
 ## Planned subjects to cover are:
-- Convolutional networks (image recognition)
-- Variational Autoencoders
+- Convolutional & Variational Autoencoders
 - Support vector machines / classic ML methods
 - Unsupervised / Deep Learning models

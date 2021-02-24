@@ -24,53 +24,61 @@ class SimpleAutoEncoder():
         inputdims   - (int) Dimensions of the input data. Note that this
                       network does not perform any data reshaping.
         latentdims  - (int) Dimension of the latent space.
-        structure   - (list) List of ints specifying the dimensionality (number
-                      of neurons) of the interstitial hidden layers.
-        params      - (dict) Other parameters. A dictionary of values to set
-                      the attributes (if different from their default values).
-        
-        Attributes:
-        inputdims   - (tuple) Dimensions of the input data.
-        latentdims  - (int) Dimension of the latent space.
-        structure   - (list) List of ints specifying the dimensionality of the
-                      interstitial hidden layers.
-        activation  - (str) Keras activation function to be used in the inter-
-                     stitial layers. defaults to 'relu'.
+        blocks      - (list) List of DenseBlock building block objects to
+                      construct the (encoding) network from.
+                      
+        Keywords:
+        decode_blocks - (list) List of DenseBlock building block objects to
+                      construct the decoding network from. If None (default),
+                      the decoder is built as a mirror image of the encoder.
         optimizer   - (str) Keras optimizer to use during training. defaults
-                     to 'adam'.
-        verbose     - (bool) Toggles command line output. Defaults to 1 (T)."""
-    def __init__(self, inputdims, latentdims, structure, params={}):
+                      to 'adam'.
+        latent_activation - (str) Activation function to use in the latent 
+                      layer. Defaults to 'relu'.
+        output_activation - (str) Activation function to use in the output
+                      layer.Defaults to 'sigmoid'.
+        verbose     - (bool) Toggles command line output. Defaults to True.
+        """
+    def __init__(self, inputdims, latentdims, blocks, decode_blocks=None,
+                 optimizer='adam', latent_activation='relu',
+                 output_activation='sigmoid', verbose=True):
         # Note: input does not perform reshaping
         self.inputdims = inputdims
         self.latentdims = latentdims
-        self.structure = structure
-        default_params = {'activation':'relu', 'optimizer':'adam', 'verbose':1}    
-        self.__dict__.update(default_params)
-        self.__dict__.update(params)
+        self.blocks = blocks
+        self.decode_blocks = decode_blocks
+        self.optimizer = optimizer
+        self.latent_activation = latent_activation
+        self.output_activation = output_activation
+        self.verbose = verbose
+        # Attributes not created by the user
+        self.layers = []; self.model = None
         # History tracking
         self.loss=[]; self.accuracy=[]
         # Do the thing:
         self.Build()
+        
     def Build(self):
         """Constructs the model from the specified structure."""
         # Define the encoder layers:
         self.input = tf.keras.Input(shape=self.inputdims) 
         self.encoding_layers = []
-        for i in self.structure:
-            self.encoding_layers.append(tf.keras.layers.Dense(i,
-                    activation=self.activation))
+        for blk in self.blocks:
+            self.encoding_layers += blk.layerlist()
         self.latent = tf.keras.layers.Dense(self.latentdims,
-                activation = self.activation)
+                activation = self.latent_activation)
         self.encoding_layers.append(self.latent)
         # Define the decoding layers:
         self.encoded_input = tf.keras.Input(shape=self.latentdims) 
-        self.decoding_layers = [tf.keras.layers.Dense(self.structure[-1],
-                activation = 'sigmoid')]
-        for i in reversed(self.structure[:-1]):
-            self.decoding_layers.append(tf.keras.layers.Dense(i,
-                    activation=self.activation))
+        self.decoding_layers = []
+        if self.decode_blocks != None:
+            for blk in self.decode_blocks:
+                self.decoding_layers += blk.layerlist()
+        else:
+            for blk in self.blocks:
+                self.decoding_layers += blk.layerlist(reverse=True)        
         self.output = tf.keras.layers.Dense(self.inputdims,                                            
-                activation = self.activation)
+                activation = self.output_activation)
         self.decoding_layers.append(self.output)
         # Build the intertwinned models
         self.encoder = tf.keras.Model(self.input,
@@ -85,30 +93,38 @@ class SimpleAutoEncoder():
                 metrics=['accuracy'], loss='binary_crossentropy')
                 
     def train(self, xtrain, batch=1, epochs=1):
-        """Trains the model on the given data set.
-        Arguments:
-        xtrain - (ndarray) Input training data.
-        Keywords:
-        batch  - (int) Batch size. defaults to 1.
-        epochs - (int) Number of epochs. defaults to 1.
-        """
+        """ Trains the model on the given data set.
+        
+            Arguments:
+            xtrain - (ndarray) Input training data.
+            
+            Keywords:
+            batch  - (int) Batch size. defaults to 1.
+            epochs - (int) Number of epochs. defaults to 1.
+            """
         self.autoencoder.fit(xtrain, xtrain, batch_size=batch, epochs=epochs,
                        verbose=self.verbose, shuffle=True)
         self.loss += (self.autoencoder.history.history['loss'])
-        self.accuracy += (self.autoencoder.history.history['acc'])
+        self.accuracy += (self.autoencoder.history.history['accuracy'])
     
     def Encode(self, xdata):
-        """Returns the latent space/encoded representation of the data.
-        Arguments:
-        xdata - (ndarray) Input data.
-        Returns:
-        xdata - (ndarray) Encoded representation of the data."""
+        """ Returns the latent space/encoded representation of the data.
+        
+            Arguments:
+            xdata - (ndarray) Input data.
+            
+            Returns:
+            xdata - (ndarray) Encoded representation of the data.
+            """
         return self.encoder.predict(xdata)
     def Decode(self, zdata):
-        """Returns the reconstruction of output data based on space/encoded
-        representation.
-        Arguments:
-        zdata - (ndarray) Input encoded data.
-        Returns:
-        xdata - (ndarray) Decoded/reconstructed output data."""
+        """ Returns the reconstruction of output data based on space/encoded
+            representation.
+            
+            Arguments:
+            zdata - (ndarray) Input encoded data.
+            
+            Returns:
+            xdata - (ndarray) Decoded/reconstructed output data.
+            """
         return self.decoder.predict(zdata)

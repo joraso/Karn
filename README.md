@@ -17,7 +17,7 @@ Sample constructions of different neural network archetechtures.
 - **SimpleAutoEncoder_MINSTfashion**: A test of autoencoder archetecture on the MINST fashion data set, testing it's reducibility to 2 dimensions.
 
 ## Planned subjects to cover are:
-- Convulutional networks (image recognition)
+- Convolutional networks (image recognition)
 - Variational Autoencoders
 - Support vector machines / classic ML methods
 - Unsupervised / Deep Learning models

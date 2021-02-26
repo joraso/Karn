@@ -61,14 +61,20 @@ class Conv2Dblock:
         activation  - (str) Activation function to use in the convolutional
                       layers. Defauls to 'relu'.
         pooltype    - (str) The type of pooling to be performed in the pooling
-                      layer. Current options are: 'max' and 'ave'. Defaults
-                      to 'max'.
+                      layer. Current options are: 
+                          'max' - Max pooling
+                          'ave' - average pooling
+                      Defaults to 'max'.
         pool_size   - (tuple) The (vertical, horizontal) factors by which to
                       downscale in the pooling layer. Defaults to (2,2).
-        conv_params - (dict) Dictionary of other parameters to pass to the
+        conv_params - (dict) Dictionary of keyword parameters to pass to the
                       convolutional layer (if different from keras defaults).
-        pool_params - (dict) Dictionary of other parameters to pass to the
-                      pooling layer (if different from keras defaults).
+        pool_params - (dict) Dictionary of keyword parameters to pass to the
+                      average or max pooling layer (if different from keras
+                      defaults).
+        ups_params  - (dict) Dictionary of keyword parameters to pass to the
+                      up-sampling layer in inverted layers (if different from
+                      keras defaults).
         """
     def __init__(self, filters, kernel_size, activation='relu', pooltype='max',
                  pool_size=(2,2), conv_params={}, pool_params={}):
@@ -76,6 +82,8 @@ class Conv2Dblock:
         self.kernel_size = kernel_size
         self.activation = activation
         self.pooltype = pooltype
+        if self.pooltype not in ['max', 'ave']:
+            print("Error: unrecognized pooling type.")
         self.pool_size = pool_size
         self.conv_params = {'strides':(1, 1), 'padding':"valid",
             'data_format':'channels_last',
@@ -89,19 +97,64 @@ class Conv2Dblock:
         self.pool_params = {'strides':None, 'padding':"valid",
             'data_format':'channels_last'}
         self.pool_params.update(pool_params)
+        self.ups_params = {'interpolation':"nearest",
+            'data_format':'channels_last'}
+        self.ups_params.update(pool_params)
 
-    def layerlist(self):
+    def layerlist(self, inverted=False):
         """ Conscructs the keras layers comprising the convolutional block and
-        returns a (2-member) list to be compiled by the nework object."""
-        convlayer = tf.keras.layers.Conv2D(self.filters, self.kernel_size,
-            activation = self.activation, **self.conv_params)
-        if self.pooltype == 'max':
-            pool = tf.keras.layers.MaxPooling2D(pool_size=self.pool_size,
-                **self.pool_params)
-        elif self.pooltype == 'ave':
-            pool = tf.keras.layers.AveragePooling2D(pool_size=self.pool_size,
-                **self.pool_params)
-        else:
-            print("Error: unrecognized pooling type")
-        return [convlayer, pool]
+            returns a (2-member) list to be compiled by the nework object.
+            
+            Keywords:
+            inverted - (bool) If True, returns an iverted convolution (up-
+                       sampling followed by deconvolution). Defaults to False.
+                       
+            Returns:
+            layers   - (list) A list of un-built keras layers.
+            """
         
+        if inverted:
+            deconvlayer = tf.keras.layers.Conv2DTranspose(self.filters,
+                self.kernel_size, activation = self.activation,
+                **self.conv_params)
+            uppool = tf.keras.layers.UpSampling2D(size=self.pool_size,
+                **self.ups_params)
+            return [uppool, deconvlayer]
+        else:
+            convlayer = tf.keras.layers.Conv2D(self.filters, self.kernel_size,
+                activation = self.activation, **self.conv_params)
+            if self.pooltype == 'max':
+                pool = tf.keras.layers.MaxPooling2D(pool_size=self.pool_size,
+                    **self.pool_params)
+            elif self.pooltype == 'ave':
+                pool = tf.keras.layers.AveragePooling2D(
+                    pool_size=self.pool_size, **self.pool_params)
+            return [convlayer, pool]
+        
+    def output_shape(self, input_shape, inverted=False):
+        """ Attempts to predict the output tensor shape of the block. (not
+            including the channel dimension.)
+        
+            Arguments:
+            input_shape  - (tuple, len=3) The input shape anitcipated from the
+                           previous layer/block.
+        
+            Returns:
+            output_shape - (tuple, len=3) The predicted output dimensions of
+                           the convolution block.
+            """
+        def reduce(n, c, p):
+            d = n + 1 - c # dimension reduction from convolution
+            d = int(d/p) # reduction from pooling
+            return d
+        def expand(n, c, p):
+            d = int(n*p) #  increase from upsampling
+            d = d - 1 + c # increase from de-convolution
+            return d
+        change = expand if inverted else reduce
+        x = change(input_shape[0], self.kernel_size[0],
+            self.pool_size[0])
+        y = change(input_shape[1], self.kernel_size[1],
+            self.pool_size[1])
+        return (x, y, self.filters)
+            

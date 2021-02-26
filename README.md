@@ -13,13 +13,19 @@ Sample constructions of different neural network archetechtures.
 - **SimpleClassifier**: Simple DNN for supervised classification.
 - **SimpleAutoEncoder**: Simplest possible autoencoder archetecture.
 - **ImageClassifier**: Basic structure for a convolutional image classification network.
+- **ImageAutoEncoder**: Convolutional AutoEncoder for image processing (and other stuff, I suppose, as applicable).
 
 ## Notebooks / Experiments:
 - **SimpleClassifier_MINSTfashion**: A simple network to classify images of articles of clothing from the MINST fashion data set.
 - **SimpleAutoEncoder_MINSTfashion**: A test of autoencoder archetecture on the MINST fashion data set, testing it's reducibility to 2 dimensions.
-- **ImageClassifier_CIFAR**: A first pass at implementing/testing the ImageClassifier object using the CIFAR 10 data set.
+- **ImageClassifier_CIFAR10**: A first pass at implementing/testing the ImageClassifier object using the CIFAR 10 data set.
 
 ## Planned subjects to cover are:
-- Convolutional & Variational Autoencoders
-- Support vector machines / classic ML methods
+- Training regimes and learning schedules
+- Testing Bias vs. Variance
+- Strategies for improving robustness
+- Variational Autoencoders
+- Graph Convolutional networks
+- Support vector machines, clustering algorithms and other classic ML methods
 - Unsupervised / Deep Learning models
+- Adversarial networks

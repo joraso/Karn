@@ -29,8 +29,9 @@ class ImageAutoEncoder:
                       
         Keywords:
         decode_blocks - (list) List of Conv2Dblock building block objects to
-                      construct the decoding network from. If None (default),
-                      the decoder is built as a mirror image of the encoder.
+                      construct the decoding network from, listet from latent
+                      to output. If None (default), the decoder is built as the
+                      inverse of the encoding convolutions, in reverse order.
         optimizer   - (str) Keras optimizer to use during training. defaults
                       to 'adam'.
         latent_activation - (str) Activation function to use in the latent 
@@ -46,7 +47,12 @@ class ImageAutoEncoder:
         self.inputdims = inputdims
         self.latentdims = latentdims
         self.blocks = blocks
-        self.decode_blocks = decode_blocks
+        if decode_blocks == None:
+            self.decode_blocks = []
+            for blk in reversed(self.blocks):
+                self.decode_blocks.append(blk.inverse())
+        else:
+            self.decode_blocks = decode_blocks
         self.optimizer = optimizer
         self.latent_activation = latent_activation
         self.output_activation = output_activation
@@ -82,23 +88,17 @@ class ImageAutoEncoder:
         self.decoding_layers = []
         # First, Deduce the neccessary shape of the decode input.
         shape = self.inputdims
-        if self.decode_blocks != None:
-            for blk in reversed(self.decode_blocks):
-                shape = blk.input_shape(shape, inverted=True)
-        else:
-            for blk in self.blocks:
-                shape = blk.input_shape(shape, inverted=True)
+        for blk in reversed(self.decode_blocks):
+            shape = blk.input_shape(shape)
         # Dense up to the right size -> Reshape to deconvolve
         self.decoding_layers.append(tf.keras.layers.Dense(
             shape[0]*shape[1]*shape[2], activation = self.latent_activation))
         self.decoding_layers.append(tf.keras.layers.Reshape(shape))
-        # Now generate the inverse of the convolution blocks.
-        if self.decode_blocks != None:
-            for blk in self.decode_blocks:
-                self.decoding_layers += blk.layerlist(inverted=True)
-        else:
-            for blk in reversed(self.blocks):
-                self.decoding_layers += blk.layerlist(inverted=True)
+        # Now generate the inverse of the convolution blocks, tracking the
+        # change in tensor shape along the way.
+        for blk in self.decode_blocks:
+            self.decoding_layers += blk.layerlist()
+            shape = blk.output_shape(shape)
         # Finally, the output should be the a convolution block,
         # and it needs to restore the original channels of the image:
         outblk = tf.keras.layers.Conv2D(self.inputdims[2], (1,1),
@@ -116,6 +116,12 @@ class ImageAutoEncoder:
         # models do not need compiling, since we don't train them individually)
         self.autoencoder.compile(optimizer=self.optimizer,
                 metrics=['accuracy'], loss='binary_crossentropy')
+        # Here we toss an error if we didn't recover the correct dimensions:
+        if shape != self.inputdims:
+            print("Error: shape mismatch when constructing decoder, re-design"+
+            " convolution-inverse geometry and rebuild before training.")
+            self.autoencoder.summary()
+                
     def train(self, xtrain, batch=1, epochs=1):
         """ Trains the model on the given data set.
         

@@ -7,27 +7,28 @@ Created on Wed Feb 24 12:33:21 2021
 import tensorflow as tf
 from utils import connect
 
-class ImageAutoEncoder():
+class ImageAutoEncoder:
     """ A convolutional auto-encoder neural network design. The basic 
         construction is:
         
             input -> encoder -> latent -> decoder -> output
         
         The encoder consists of an input layer, followed by any number of
-        interstitial convulutional layers, then a low dimensional latent layer.
-        The decoder archetecture defaults to a mirror to the encoder. The loss
-        function is set to the binary cross-entropy between the input and the
-        reconstructed output.
-        
+        interstitial convulutional layers, then a low dimensional (dense)
+        latent layer. The decoder archetecture defaults to a mirror to the
+        encoder (with upsampling and deconvolution replacing pooling and
+        convolution). The loss function is set to the binary cross-entropy
+        between the input and the reconstructed output.
+       
         Arguments:
         inputdims   - (int) Dimensions of the input data. Note that this
                       network does not perform any data reshaping.
         latentdims  - (int) Dimension of the latent space.
-        blocks      - (list) List of DenseBlock building block objects to
+        blocks      - (list) List of Conv2Dblock building block objects to
                       construct the (encoding) network from.
                       
         Keywords:
-        decode_blocks - (list) List of DenseBlock building block objects to
+        decode_blocks - (list) List of Conv2Dblock building block objects to
                       construct the decoding network from. If None (default),
                       the decoder is built as a mirror image of the encoder.
         optimizer   - (str) Keras optimizer to use during training. defaults
@@ -61,67 +62,60 @@ class ImageAutoEncoder():
         """Constructs the model from the specified structure."""
         # Generate a list of the encoder layers from input through latent
         # and build the encoder, tracking the tensor shape along the way
-        shape = self.inputdims
         self.input = tf.keras.Input(shape=self.inputdims)
         self.encoding_layers = []
         for blk in self.blocks:
             self.encoding_layers += blk.layerlist()
-            shape = blk.output_shape(shape)
         # flatten for the dense latent space:
         self.encoding_layers.append(tf.keras.layers.Flatten())
+        
         self.latent = tf.keras.layers.Dense(self.latentdims,
                 activation = self.latent_activation)
         self.encoding_layers.append(self.latent)
         # Build the encoding model
         self.encoder = tf.keras.Model(self.input,
                 connect(self.input, self.encoding_layers))
-        
-        # Define an encoded input layer for sampling the latent space
+        # Define an input layer for sampling the latent space
         self.encoded_input = tf.keras.Input(shape=self.latentdims)
         # Then generate a list of decoding layers, through the output,
         # and build the decoder, tracking the shape along the way:
         self.decoding_layers = []
-        # First, Dense up to the right size -> Reshape
+        # First, Deduce the neccessary shape of the decode input.
+        shape = self.inputdims
+        if self.decode_blocks != None:
+            for blk in reversed(self.decode_blocks):
+                shape = blk.input_shape(shape, inverted=True)
+        else:
+            for blk in self.blocks:
+                shape = blk.input_shape(shape, inverted=True)
+        # Dense up to the right size -> Reshape to deconvolve
         self.decoding_layers.append(tf.keras.layers.Dense(
             shape[0]*shape[1]*shape[2], activation = self.latent_activation))
         self.decoding_layers.append(tf.keras.layers.Reshape(shape))
         # Now generate the inverse of the convolution blocks.
-        # Note that we pop off what will be the final block because we have to
-        # configure it a little differently...
         if self.decode_blocks != None:
-            outblk = self.decode_blocks.pop(-1)
             for blk in self.decode_blocks:
                 self.decoding_layers += blk.layerlist(inverted=True)
-                shape = blk.output_shape(shape, inverted=True)
         else:
-            outblk = self.blocks.pop(0)
             for blk in reversed(self.blocks):
                 self.decoding_layers += blk.layerlist(inverted=True)
-                shape = blk.output_shape(shape, inverted=True)
-        # Finally, the output should be the last convolution block,
-        # but it needs to restore the original channels of the image:
-        outblk.filters = self.inputdims[2]
-        outblk.activation = self.output_activation
-        self.decoding_layers += outblk.layerlist(inverted=True)
-        shape = outblk.output_shape(shape, inverted=True)
+        # Finally, the output should be the a convolution block,
+        # and it needs to restore the original channels of the image:
+        outblk = tf.keras.layers.Conv2D(self.inputdims[2], (1,1),
+                activation = self.output_activation)#, **self.conv_params)
+        shape = (shape[0], shape[1], self.inputdims[2])
+        self.decoding_layers.append(outblk)
         self.output = self.decoding_layers[-1]
         # Build the decoding model
         self.decoder = tf.keras.Model(self.encoded_input,
                 connect(self.encoded_input, self.decoding_layers))
+        # Build the full autoencoder
         self.autoencoder = tf.keras.Model(self.input,
                 connect(self.input, self.encoding_layers+self.decoding_layers))
-
         # Compile the auto encoder for training (the separate encoder/decoder
         # models do not need compiling, since we don't train them individually)
         self.autoencoder.compile(optimizer=self.optimizer,
                 metrics=['accuracy'], loss='binary_crossentropy')
-                
-        # Here we toss an error if we didn't recover the correct dimensions:
-        if shape != self.inputdims:
-            print("Error: dimensions got squished in translation, re-design "+
-            "convolution geometry and rebuild.")
-            self.autoencoder.summary()
-                
     def train(self, xtrain, batch=1, epochs=1):
         """ Trains the model on the given data set.
         

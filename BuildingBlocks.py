@@ -29,6 +29,10 @@ class DenseBlock:
             'activity_regularizer':None, 'kernel_constraint':None, 
             'bias_constraint':None}
         self.dense_params.update(dense_params)
+    def copy(self):
+        duplicant = DenseBlock(self.structure)
+        duplicant.__dict__.update(self.__dict__)
+        return duplicant
     
     def layerlist(self, reverse=False):
         """ Consructs the keras layers comprising the block hidden layers and
@@ -157,4 +161,30 @@ class Conv2Dblock:
         y = change(input_shape[1], self.kernel_size[1],
             self.pool_size[1])
         return (x, y, self.filters)
+    
+    def input_shape(self, output_shape, inverted=False):
+        """ Attempts to predict the input tensor shape of the block for a given
+            output shape. (The channel dimention is unchanged)
             
+            Arguments:
+            input_shape  - (tuple, len=3) The input shape anitcipated from the
+                           previous layer/block.
+            
+            Returns:
+            output_shape - (tuple, len=3) The predicted output dimensions of
+                           the convolution block.
+            """
+        def reduce(n, c, p):
+            d = n + 1 - c # dimension reduction from convolution
+            d = int(d/p) # reduction from pooling
+            return d
+        def expand(n, c, p):
+            d = int(n*p) #  increase from upsampling
+            d = d - 1 + c # increase from de-convolution
+            return d
+        change = reduce if inverted else expand
+        x = change(output_shape[0], self.kernel_size[0],
+            self.pool_size[0])
+        y = change(output_shape[1], self.kernel_size[1],
+            self.pool_size[1])
+        return (x, y, output_shape[2])

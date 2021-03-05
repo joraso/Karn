@@ -5,6 +5,7 @@ Created on Tue Feb 23 12:58:17 2021
 """
 
 import tensorflow as tf
+from utils import convdim
 
 class DenseBlock:
     """ Object containing the parameters for a block of hidden dense layers.
@@ -155,8 +156,9 @@ class Conv2Dblock:
         
     def output_shape(self, input_shape):
         """ Attempts to predict the output tensor shape of the block. (not
-            including the channel dimension.) NOTE: Currently this does not
-            account for non-zero padding
+            including the channel dimension.) Although untested, this should 
+            now account for different padding types and pool strides (but
+            not dilation rate, yet).
         
             Arguments:
             input_shape  - (tuple, len=3) The input shape anitcipated from the
@@ -166,19 +168,32 @@ class Conv2Dblock:
             output_shape - (tuple, len=3) The predicted output dimensions of
                            the convolution block.
             """
-        def change(n, c, p):
-            d = n + 1 - c # dimension reduction from convolution
-            # reduction from pooling or increase from upsampling
-            d = int(d*p) if self.pooltype=='ups' else int(d/p)
-            return d
-        x = change(input_shape[0], self.kernel_size[0], self.pool_size[0])
-        y = change(input_shape[1], self.kernel_size[1], self.pool_size[1])
+        # Accounting for convolution
+        x = convdim(input_shape[0], self.kernel_size[0],
+            self.conv_params['strides'][0],
+            padding=self.conv_params['padding'])
+        y = convdim(input_shape[1], self.kernel_size[1],
+            self.conv_params['strides'][1],
+            padding=self.conv_params['padding'])
+        # Accounting for pooling
+        if self.pooltype == 'ups':
+            x = x*self.pool_size[0]; y = y*self.pool_size[1]
+        else:
+            if self.pool_params['strides'] == None:
+                poolstride = self.pool_size
+            else:
+                poolstride = self.pool_params['strides']
+            x = convdim(x, self.pool_size[0], poolstride[0],
+                padding=self.pool_params['padding'])
+            y = convdim(y, self.pool_size[1], poolstride[1],
+                padding=self.pool_params['padding'])
         return (x, y, self.filters)
     
     def input_shape(self, output_shape):
         """ Attempts to predict the input tensor shape of the block for a given
-            output shape. (The channel dimention is unchanged.) NOTE: Currently
-            this does not account for non-zero padding
+            output shape. (The channel dimention is unchanged.) Although
+            untested, this should now account for different padding types and
+            pool strides (but not dilation rate, yet).
             
             Arguments:
             output_shape - (tuple, len=3) The target output shape.
@@ -187,14 +202,26 @@ class Conv2Dblock:
             input_shape  - (tuple, len=3) The neccessary input dimensions to
                            produce the target output.
             """
-        def change(n, c, p):
-            # reduction from pooling or increase from upsampling
-            d = int(n/p) if self.pooltype=='ups' else int(n*p) #  increase from upsampling
-            d = d - 1 + c # undo reduction from convolution
-            return d
-        x = change(output_shape[0], self.kernel_size[0], self.pool_size[0])
-        y = change(output_shape[1], self.kernel_size[1], self.pool_size[1])
-        return (x, y, output_shape[2])
+        # Accounting for convolution
+        x = convdim(output_shape[0], self.kernel_size[0],
+            self.conv_params['strides'][0],
+            padding=self.conv_params['padding'], reverse=True)
+        y = convdim(output_shape[1], self.kernel_size[1],
+            self.conv_params['strides'][1],
+            padding=self.conv_params['padding'], reverse=True)
+        # Accounting for pooling
+        if self.pooltype == 'ups':
+            x = int(x/self.pool_size[0]); y = int(y/self.pool_size[1])
+        else:
+            if self.pool_params['strides'] == None:
+                poolstride = self.pool_size
+            else:
+                poolstride = self.pool_params['strides']
+            x = convdim(x, self.pool_size[0], poolstride[0],
+                padding=self.pool_params['padding'], reverse=True)
+            y = convdim(y, self.pool_size[1], poolstride[1],
+                padding=self.pool_params['padding'], reverse=True)
+        return (x, y, self.filters)
         
 class Deconv2Dblock:
     """ An object containing the parameters of a compound deconvolution layer,
@@ -248,8 +275,9 @@ class Deconv2Dblock:
         
     def output_shape(self, input_shape, inverted=False):
         """ Attempts to predict the output tensor shape of the block. (not
-            including the channel dimension.) NOTE: Currently this does not
-            account for non-zero padding.
+            including the channel dimension.) Although untested, this should
+            now account for different padding types (but not dilation rate,
+            yet).
         
             Arguments:
             input_shape  - (tuple, len=3) The input shape anitcipated from the
@@ -259,16 +287,17 @@ class Deconv2Dblock:
             output_shape - (tuple, len=3) The predicted output dimensions of
                            the convolution block.
             """
-        def change(n, c, s): #  increase from deconvolution
-            return (n-1)*s + (c)
-        x = change(input_shape[0], self.kernel_size[0], self.stride[0])
-        y = change(input_shape[1], self.kernel_size[1], self.stride[1])
+        x = convdim(input_shape[0], self.kernel_size[0], self.stride[0],
+            padding=self.conv_params['padding'], reverse=True)
+        y = convdim(input_shape[1], self.kernel_size[1], self.stride[1],
+            padding=self.conv_params['padding'], reverse=True)
         return (x, y, self.filters)
     
     def input_shape(self, output_shape, inverted=False):
         """ Attempts to predict the input tensor shape of the block for a given
-            output shape. (The channel dimention is unchanged.) NOTE: Currently
-            this does not account for non-zero padding
+            output shape. (The channel dimention is unchanged.) Although
+            untested, this should now account for different padding types (but
+            not dilation rate, yet).
             
             Arguments:
             output_shape - (tuple, len=3) The target output shape.
@@ -277,8 +306,8 @@ class Deconv2Dblock:
             input_shape  - (tuple, len=3) The neccessary input dimensions to
                            produce the target output.
             """
-        def change(n, c, s): #  inverse operation of deconvolution
-            return int((n-c)/s) + 1
-        x = change(output_shape[0], self.kernel_size[0], self.stride[0])
-        y = change(output_shape[1], self.kernel_size[1], self.stride[1])
+        x = convdim(output_shape[0], self.kernel_size[0], self.stride[0],
+            padding=self.conv_params['padding'])
+        y = convdim(output_shape[1], self.kernel_size[1], self.stride[1],
+            padding=self.conv_params['padding'])
         return (x, y, self.filters)

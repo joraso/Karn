@@ -19,6 +19,7 @@ Sample constructions of different neural network archetechtures.
 - **SimpleClassifier_MINSTfashion**: A simple network to classify images of articles of clothing from the MINST fashion data set.
 - **SimpleAutoEncoder_MINSTfashion**: A test of autoencoder archetecture on the MINST fashion data set, testing it's reducibility to 2 dimensions.
 - **ImageClassifier_CIFAR10**: A first pass at implementing/testing the ImageClassifier object using the CIFAR 10 data set.
+- **ImageAutoEncoder_MINSTfashion**: A test of the convolutional autoencoder archetecture on the MINST fashion data set, evaluating it's quirks and loosely comparing it's performance to the SimpleAutoEncoder.
 
 ## Planned subjects to cover are:
 - Training regimes and learning schedules

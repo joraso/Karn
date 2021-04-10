@@ -10,10 +10,6 @@ Compound-layer block object used to construct neural networks.
 - **Conv2Dblock**: A block consisting of a 2D convolution followed by pooling, for image-based archetectures.
 - **Deconv2Dblock**: A de-convolution block consisting of Conv2DTranspose followed by batch normalization, for image-based archetectures (mainly autoencoders).
 
-### Custom Layers
-Custom keras Layer objects implemented for certain neural networks.
-- **VariationalLatentLayer**: Layer that feeds mean and log-variance layers into a randomly sampled latent space (via the 'reparametrization trick'), while adding the appropriate KL divergence to the losses for the associated model. For variational autoencoders.
-
 ### Network Archetectures
 Sample constructions of different neural network archetechtures.
 - **SimpleClassifier**: Simple DNN for supervised classification.

@@ -7,7 +7,6 @@ Created on Thu Apr  1 11:46:41 2021
 import numpy as np
 import tensorflow as tf
 from utils import connect
-from CustomLayers import VariationalLatentLayer
 
 class SimpleVariationalAutoEncoder:
     """ A variational version of the simple autoencoder neural network design.
@@ -35,6 +34,8 @@ class SimpleVariationalAutoEncoder:
                       construct the (encoding) network from.
                       
         Keywords:
+        beta        - (float) Weight to give to the KL loss term. Should be
+                      alterable throughout training. Defaults to 1.
         decode_blocks - (list) List of DenseBlock building block objects to
                       construct the decoding network from. If None (default),
                       the decoder is built as a mirror image of the encoder.
@@ -47,13 +48,15 @@ class SimpleVariationalAutoEncoder:
                       layer. Defaults to 'sigmoid'.
         verbose     - (bool) Toggles command line output. Defaults to True.
         """
-    def __init__(self, inputdims, latentdims, blocks, decode_blocks=None,
-                 optimizer='rmsprop', latent_activation='relu',
-                 output_activation='sigmoid', verbose=True):
+    def __init__(self, inputdims, latentdims, blocks, beta=1.0,
+                 decode_blocks=None, optimizer='rmsprop',
+                 latent_activation='relu', output_activation='sigmoid', 
+                 verbose=True):
         # Note: input does not perform reshaping
         self.inputdims = inputdims
         self.latentdims = latentdims
         self.blocks = blocks
+        self.beta = beta
         self.decode_blocks = decode_blocks
         self.optimizer = optimizer
         self.latent_activation = latent_activation
@@ -85,7 +88,16 @@ class SimpleVariationalAutoEncoder:
         self.mu = self.mu(encode)
         
         # Finally, the variational latent layer
-        self.latent = VariationalLatentLayer()([self.logvar, self.mu])
+        def sampling(inputs):
+            # retrieve the inputs
+            logvar, mu = inputs
+            # generate a random sample from a normal distribution
+            epsilon = tf.keras.backend.random_normal(tf.keras.backend.shape(mu))
+            # calculate the variance
+            sigma = tf.keras.backend.exp(logvar)
+            # Resturn a scaled z
+            return mu + sigma*epsilon
+        self.latent = tf.keras.layers.Lambda(sampling)([self.logvar, self.mu])
         
         # and build the encoder
         self.encoder = tf.keras.Model(self.input, self.latent)
@@ -107,15 +119,28 @@ class SimpleVariationalAutoEncoder:
         decoded = connect(self.encoded_input, self.decoding_layers)
         self.decoder = tf.keras.Model(self.encoded_input, decoded)
         
+        # Implement the KL loss funtion
+        def divergence(inputs):
+            # retrieve the inputs
+            logvar, mu = inputs
+            # Calculate the by-sample loss
+            KLloss = -0.5 * self.beta * tf.keras.backend.sum(1 + logvar - 
+            tf.keras.backend.square(mu) - 
+            tf.keras.backend.exp(logvar), axis=1)
+            # return the mean divergence
+            return tf.keras.backend.mean(KLloss)
+        self.KLloss = tf.keras.layers.Lambda(divergence)([self.logvar,self.mu])
+        
         # Compile the auto encoder for training
         autoencoded = connect(self.latent, self.decoding_layers)
         self.autoencoder = tf.keras.Model(self.input, autoencoded)
-        # note the addition of the reconstruction loss (binary cross-entropy),
-        # the kl loss is added automatically in the VariationalLatentLayer
         self.autoencoder.compile(optimizer=self.optimizer,
             loss='BinaryCrossentropy',
             metrics=[tf.keras.metrics.BinaryCrossentropy()])
-                
+        # add in the KLloss / Metric
+        self.autoencoder.add_loss(self.KLloss)
+        self.autoencoder.add_metric(self.KLloss, name='kl_divergence')
+
     def train(self, xtrain, batch=1, epochs=1):
         """ Trains the model on the given data set.
         

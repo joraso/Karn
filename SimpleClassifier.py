@@ -75,6 +75,7 @@ class SimpleClassifier:
     def predict(self, xset):
         """Returns the catagory predictions on a test data set. Uses the simple
             most likely catagory given the vector output of the model.
+            
             Arguments:
             xset - (ndarray) The set of input data to catagorize. Note that the
                    function expects a batch of samples to predict, so take care
@@ -85,34 +86,30 @@ class SimpleClassifier:
         pred = self.model.predict(xset)
         return np.argmax(pred, axis=1)
         
+    def confusion(self, xtest, ytest):
+        """Returns a the confusion matrix of the trained model as a numpy array.
+        
+            Arguments:
+            xtrain - (ndarray) Input test data.
+            ytrain - (ndarray) Test training labels, expected to be an array of 
+                     ints in the range [0, ncatagories).
+                     
+            Returns:
+            matrix - (ndarray) The confusion matrix (true values as rows, 
+                     predictions as columns).
+        """
+        matrix = np.zeros((self.ncatagories,self.ncatagories))
+        ypred = self.predict(xtest)
+        for i in range(len(ypred)):
+            matrix[ytest[i], ypred[i]] += 1
+        return matrix
         
 if __name__ == '__main__':
     
-    # Attempted Bias / Variance evaluation:
+    # Testing the confusion matrix calculations
     (xtrain, ytrain), (xtest, ytest) = tf.keras.datasets.fashion_mnist.load_data()
     from BuildingBlocks import DenseBlock
     block = DenseBlock([784, 196, 196, 49])
-    net = ClassifierNet((28,28), 10, [block])
+    net = SimpleClassifier((28,28), 10, [block])
     net.train(xtrain, ytrain, batch=5000, epochs=20)
-    ytrue = ytest
-    ypred = net.model.predict(xtest)
-    ypred = net.predict(xtest)    
-    LossFxn = tf.keras.losses.MeanSquaredError() # Perhaps the better loss function
-#    LossFxn = tf.keras.losses.SparseCategoricalCrossentropy() # Loss function used in the model
-    # find the prediction that has a minimum average loss compared to the others:
-    cross_losses = np.zeros(ypred.shape[0])
-    for i in range(ypred.shape[0]):
-        # Select a test prediction
-#        ytest = np.argmax(ypred, axis=1)[i]*np.ones(ypred.shape[0])
-        ytest = ypred[i]*np.ones(ypred.shape[0])
-        # Record the average loss, with that prediction as the 'true value'
-        cross_losses[i] = LossFxn(ytest, ypred).numpy()
-    mindx = np.where(cross_losses==np.min(cross_losses))[0][0] # row of the main prediction
-    # find the prediction that resulted in the minimum average loss (slice to a single row if needed)
-    ymain = ypred[mindx]
-    # the bias is the loss value at the main prediction (compared to true)
-#    bias = LossFxn(ytrue[mindx], ymain).numpy()
-    bias = LossFxn(np.array([ytrue[mindx]]), np.array([ymain])).numpy()
-    # finally, the variance is the average loss value between the ymain and ypred
-    variance = LossFxn(np.argmax(ypred, axis=1), ymain*np.ones(ypred.shape)).numpy()
-    variance = LossFxn(ypred, ymain*np.ones(ypred.shape)).numpy()
+    conf = net.confusion()

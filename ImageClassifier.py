@@ -92,6 +92,7 @@ class ImageClassifier:
             most likely catagory given the vector output of the model.
             
             Arguments:
+            
             xset - (ndarray) The set of input data to catagorize. Note that the
                    function expects a batch of samples to predict, so take care
                    when predicting a singular data sample that the dimensions 
@@ -100,3 +101,21 @@ class ImageClassifier:
             """
         pred = self.model.predict(xset)
         return np.argmax(pred, axis=1)
+        
+    def confusion(self, xtest, ytest):
+        """Returns a the confusion matrix of the trained model as a numpy array.
+        
+            Arguments:
+            xtrain - (ndarray) Input test data.
+            ytrain - (ndarray) Test training labels, expected to be an array of 
+                     ints in the range [0, ncatagories).
+                     
+            Returns:
+            matrix - (ndarray) The confusion matrix (true values as rows, 
+                     predictions as columns).
+        """
+        matrix = np.zeros((self.ncatagories,self.ncatagories))
+        ypred = self.predict(xtest)
+        for i in range(len(ypred)):
+            matrix[ytest[i], ypred[i]] += 1
+        return matrix

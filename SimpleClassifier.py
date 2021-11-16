@@ -93,7 +93,7 @@ class SimpleClassifier:
             xtrain - (ndarray) Input test data.
             ytrain - (ndarray) Test training labels, expected to be an array of 
                      ints in the range [0, ncatagories).
-                     
+            
             Returns:
             matrix - (ndarray) The confusion matrix (true values as rows, 
                      predictions as columns).
@@ -104,6 +104,51 @@ class SimpleClassifier:
             matrix[ytest[i], ypred[i]] += 1
         return matrix
         
+    def score(self, xtest, ytest, averaged=False):
+        """Returns a set of classification error metrics for the model.
+        
+            Arguments:
+            xtrain      - (ndarray) Input test data.
+            ytrain      - (ndarray) Test training labels, expected to be an
+                          array of ints in the range [0, ncatagories).
+                     
+            Keywords:
+            averaged    - (bool) If True, return the average values of recall,
+                          precision and specificity across all catagories in 
+                          the model. If False (default), these values are 
+                          returned as ndarrays containing the values for each 
+                          catagory individually.
+                     
+            Returns (4-values):
+            accuracy    - (float) The accuracy; Tr(confusion matrix)/n_samples.
+            recall      - (float or ndarray) Recall; TP/(TP+FN), calculated for
+                          each catagory on a one-vs-all bases.
+            precision   - (float or ndarray) Precision or sensitivity; 
+                          TP/(TP+FN), calculated for each catagory on a
+                          one-vs-all bases.
+            specificity - (float or ndarray) Specificity; TN/(TN+FP),
+                          calculated for each catagory on a one-vs-all bases.
+        """        
+        matrix = self.confusion(xtest, ytest)
+        accuracy = np.trace(matrix)/len(ytest)
+        # remaining scores are computed by catagory
+        recall = np.zeros(self.ncatagories)
+        precision = np.zeros(self.ncatagories)
+        specificity = np.zeros(self.ncatagories)
+        for i in range(self.ncatagories):
+            recall[i] = matrix[i,i] / np.sum(matrix[i,:])
+            precision[i] = matrix[i,i] / np.sum(matrix[:,i])
+            specificity[i] = (np.sum(np.delete(np.delete(matrix,i,0),i,1))/
+                np.sum(np.delete(matrix,1,0)))
+        # Optionally average the per-catagory values
+        if averaged:
+            recall = np.average(recall)
+            precision = np.average(precision)
+            specificity = np.average(specificity)
+        return accuracy, recall, precision, specificity
+        
+            
+        
 if __name__ == '__main__':
     
     # Testing the confusion matrix calculations
@@ -112,4 +157,4 @@ if __name__ == '__main__':
     block = DenseBlock([784, 196, 196, 49])
     net = SimpleClassifier((28,28), 10, [block])
     net.train(xtrain, ytrain, batch=5000, epochs=20)
-    conf = net.confusion()
+    a, r, p, s = net.score(xtest, ytest, averaged = True)
